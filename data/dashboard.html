@@ -1,0 +1,3905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K4-L3A Day 13 Monitoring & LLMOps Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --card-inner: #0f172a;
+            --border: #334155;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-green: #22c55e;
+            --accent-yellow: #eab308;
+            --accent-red: #ef4444;
+            --accent-purple: #a855f7;
+            --accent-teal: #14b8a6;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { background-color: var(--bg); color: var(--text-main); padding: 24px; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+        .header-title h1 { font-size: 22px; font-weight: 700; color: var(--text-main); }
+        .header-title p { font-size: 13px; color: var(--text-sub); margin-top: 4px; }
+        .header-badges { display: flex; gap: 10px; }
+        .badge { padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+        .badge-info { background: rgba(56, 189, 248, 0.15); color: var(--accent-blue); border: 1px solid rgba(56, 189, 248, 0.3); }
+        .badge-live { background: rgba(34, 197, 94, 0.15); color: var(--accent-green); border: 1px solid rgba(34, 197, 94, 0.3); }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        @media (max-width: 1200px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+        .panel { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 14px; position: relative; }
+        .panel-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .panel-title { font-size: 14px; font-weight: 600; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; }
+        .panel-badge { font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 700; }
+        .status-pass { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
+        .status-alert { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+        .status-normal { background: rgba(148, 163, 184, 0.2); color: var(--text-sub); }
+        .metrics-row { display: flex; gap: 16px; align-items: baseline; }
+        .metric-main { font-size: 32px; font-weight: 800; color: var(--text-main); }
+        .metric-unit { font-size: 13px; color: var(--text-sub); margin-left: 4px; }
+        .threshold-line { font-size: 11px; color: var(--accent-yellow); display: flex; align-items: center; gap: 4px; background: rgba(234, 179, 8, 0.08); padding: 4px 8px; border-radius: 4px; border-left: 2px solid var(--accent-yellow); }
+        .chart-box { height: 140px; width: 100%; position: relative; }
+        .stats-table { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: auto; }
+        .stats-table td { padding: 4px 0; color: var(--text-sub); }
+        .stats-table td:last-child { text-align: right; color: var(--text-main); font-weight: 600; }
+
+        /* Log Section Styling */
+        .log-section { margin-top: 32px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+        .log-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+        .log-header-left { display: flex; align-items: center; gap: 12px; }
+        .log-title { font-size: 16px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+        .log-sub { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+        .log-search { background: var(--card-inner); border: 1px solid var(--border); color: var(--text-main); padding: 8px 14px; border-radius: 6px; font-size: 13px; width: 360px; outline: none; }
+        .log-search:focus { border-color: var(--accent-blue); }
+        .table-container { max-height: 520px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+        .log-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+        .log-table th { background: #0b1120; color: var(--text-sub); padding: 11px 12px; font-weight: 600; position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        .log-table td { padding: 9px 12px; border-bottom: 1px solid #1e293b; color: var(--text-main); vertical-align: middle; }
+        .log-table tr:hover td { background: rgba(56, 189, 248, 0.05); }
+        .badge-mini { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+        .lvl-info { background: rgba(56, 189, 248, 0.2); color: var(--accent-blue); }
+        .lvl-warn { background: rgba(234, 179, 8, 0.2); color: var(--accent-yellow); }
+        .lvl-err { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+        .evt-recv { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
+        .evt-sent { background: rgba(34, 197, 94, 0.15); color: var(--accent-green); }
+        .evt-err { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+        .evt-default { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); }
+        .cid-badge { background: #0b1120; padding: 3px 6px; border-radius: 4px; font-size: 11px; color: #38bdf8; border: 1px solid #334155; }
+        .model-badge { background: rgba(20, 184, 166, 0.15); color: var(--accent-teal); padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid rgba(20, 184, 166, 0.3); }
+        .env-badge { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .feat-badge { background: rgba(56, 189, 248, 0.12); color: var(--accent-blue); padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .lat-normal { color: var(--text-main); font-weight: 600; }
+        .lat-alert { color: var(--accent-red); font-weight: 700; background: rgba(239, 68, 68, 0.15); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .json-details { position: relative; }
+        .json-btn { cursor: pointer; color: var(--accent-blue); font-size: 11px; font-weight: 600; user-select: none; padding: 2px 6px; border-radius: 4px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); display: inline-block; }
+        .json-btn:hover { background: rgba(56, 189, 248, 0.2); }
+        .json-pre { margin-top: 6px; background: #050811; color: #a5f3fc; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px; max-width: 500px; max-height: 240px; overflow: auto; border: 1px solid var(--border); white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-title">
+            <h1>K4-L3A Day 13 Monitoring & LLMOps Dashboard</h1>
+            <p>Source: <code>data/logs.jsonl</code> &bull; Contract: <code>config/dashboard.yaml</code></p>
+        </div>
+        <div class="header-badges">
+            <span class="badge badge-info">Window: 60 min</span>
+            <span class="badge badge-live">&bull; Refresh: 30s</span>
+        </div>
+    </header>
+
+    <div class="grid">
+        <!-- Panel 1: Latency -->
+        <div class="panel" id="panel-latency">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">1. Latency & TTFT</div>
+                    <div style="font-size: 11px; color: var(--text-sub);">Latency percentiles and TTFT</div>
+                </div>
+                <span class="panel-badge status-alert">ALERT</span>
+            </div>
+            <div class="metrics-row">
+                <div>
+                    <span class="metric-main">3517.5</span><span class="metric-unit">ms (P95)</span>
+                </div>
+            </div>
+            <div class="threshold-line">&bull; Threshold: P95 &le; 3000 ms</div>
+            <div class="chart-box"><canvas id="chart-latency"></canvas></div>
+            <table class="stats-table">
+                <tr><td>P50 Latency</td><td>2652.0 ms</td></tr>
+                <tr><td>P99 Latency</td><td>3813.9 ms</td></tr>
+                <tr><td>TTFT (P95)</td><td>50.0 ms</td></tr>
+            </table>
+        </div>
+
+        <!-- Panel 2: Traffic -->
+        <div class="panel" id="panel-traffic">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">2. Request Traffic</div>
+                    <div style="font-size: 11px; color: var(--text-sub);">Throughput over time</div>
+                </div>
+                <span class="panel-badge status-normal">NORMAL</span>
+            </div>
+            <div class="metrics-row">
+                <div>
+                    <span class="metric-main">16</span><span class="metric-unit">requests</span>
+                </div>
+            </div>
+            <div class="threshold-line">&bull; Threshold: Rate &ge; 1 req/min</div>
+            <div class="chart-box"><canvas id="chart-traffic"></canvas></div>
+            <table class="stats-table">
+                <tr><td>Rate per minute</td><td>0.27 req/min</td></tr>
+                <tr><td>Window duration</td><td>60 minutes</td></tr>
+            </table>
+        </div>
+
+        <!-- Panel 3: Errors -->
+        <div class="panel" id="panel-errors">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">3. Error Rate & Retrieval</div>
+                    <div style="font-size: 11px; color: var(--text-sub);">Failures and Tool Success</div>
+                </div>
+                <span class="panel-badge status-pass">PASS</span>
+            </div>
+            <div class="metrics-row">
+                <div>
+                    <span class="metric-main">0.0</span><span class="metric-unit">%</span>
+                </div>
+            </div>
+            <div class="threshold-line">&bull; Threshold: Error Rate &le; 2 %</div>
+            <div class="chart-box"><canvas id="chart-errors"></canvas></div>
+            <table class="stats-table">
+                <tr><td>Retrieval Success Rate</td><td>100.0 %</td></tr>
+                <tr><td>Error Types Breakdown</td><td>None</td></tr>
+            </table>
+        </div>
+
+        <!-- Panel 4: Cost -->
+        <div class="panel" id="panel-cost">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">4. Cost Over Time</div>
+                    <div style="font-size: 11px; color: var(--text-sub);">API Estimated USD Cost</div>
+                </div>
+                <span class="panel-badge status-pass">PASS</span>
+            </div>
+            <div class="metrics-row">
+                <div>
+                    <span class="metric-main">$0.0332</span><span class="metric-unit">USD</span>
+                </div>
+            </div>
+            <div class="threshold-line">&bull; Threshold: Total &le; $2.50 USD</div>
+            <div class="chart-box"><canvas id="chart-cost"></canvas></div>
+            <table class="stats-table">
+                <tr><td>Pricing (Input)</td><td>$3.00 / 1M tokens</td></tr>
+                <tr><td>Pricing (Output)</td><td>$15.00 / 1M tokens</td></tr>
+            </table>
+        </div>
+
+        <!-- Panel 5: Tokens -->
+        <div class="panel" id="panel-tokens">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">5. Input & Output Tokens</div>
+                    <div style="font-size: 11px; color: var(--text-sub);">Token Volume Breakdown</div>
+                </div>
+                <span class="panel-badge status-pass">PASS</span>
+            </div>
+            <div class="metrics-row">
+                <div>
+                    <span class="metric-main">2845</span><span class="metric-unit">tokens</span>
+                </div>
+            </div>
+            <div class="threshold-line">&bull; Threshold: Sum &le; 50,000 tokens</div>
+            <div class="chart-box"><canvas id="chart-tokens"></canvas></div>
+            <table class="stats-table">
+                <tr><td>Tokens In (Prompt)</td><td>793</td></tr>
+                <tr><td>Tokens Out (Completion)</td><td>2052</td></tr>
+            </table>
+        </div>
+
+        <!-- Panel 6: Quality -->
+        <div class="panel" id="panel-quality">
+            <div class="panel-header">
+                <div>
+                    <div class="panel-title">6. Quality Proxy</div>
+                    <div style="font-size: 11px; color: var(--text-sub);">Heuristic Quality Score</div>
+                </div>
+                <span class="panel-badge status-pass">PASS</span>
+            </div>
+            <div class="metrics-row">
+                <div>
+                    <span class="metric-main">0.84</span><span class="metric-unit">/ 1.0</span>
+                </div>
+            </div>
+            <div class="threshold-line">&bull; Threshold: Mean &ge; 0.75 score</div>
+            <div class="chart-box"><canvas id="chart-quality"></canvas></div>
+            <table class="stats-table">
+                <tr><td>Score Range</td><td>0.0 &ndash; 1.0</td></tr>
+                <tr><td>Target SLO</td><td>&ge; 0.75</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- Live Log Explorer Table -->
+    <div class="log-section">
+        <div class="log-header">
+            <div class="log-header-left">
+                <div>
+                    <div class="log-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        Live Structured Log Explorer
+                    </div>
+                    <div class="log-sub">Đầy đủ các trường JSON: <code>timestamp</code>, <code>event</code>, <code>correlation_id</code>, <code>model</code>, <code>env</code>, <code>feature</code>, <code>latency</code></div>
+                </div>
+                <span class="badge badge-info" id="log-count">Total: 100 records</span>
+            </div>
+            <input type="text" id="log-search" class="log-search" placeholder="Filter by correlation ID, model, env, feature, event..." onkeyup="filterLogs()">
+        </div>
+
+        <div class="table-container">
+            <table class="log-table" id="log-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Event</th>
+                        <th>Correlation ID</th>
+                        <th>Model</th>
+                        <th>Env</th>
+                        <th>Feature</th>
+                        <th>Latency</th>
+                        <th>Level</th>
+                        <th>Full JSON Record</th>
+                    </tr>
+                </thead>
+                <tbody id="log-tbody">
+                    
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T10:22:09</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-ce2017c5</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-alert">3394.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T10:22:09.427578Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-ce2017c5&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 3394.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;42bb85533808&quot;,
+  &quot;session_id&quot;: &quot;test-pii-check&quot;,
+  &quot;tokens_in&quot;: 58,
+  &quot;tokens_out&quot;: 98,
+  &quot;cost_usd&quot;: 0.001644,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T10:22:05</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-ce2017c5</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T10:22:05.620078Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-ce2017c5&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Lien he email [REDACTED_EMAIL], sdt [REDACTED_PHONE_VN], cccd [REDACTED_CCCD], t...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;42bb85533808&quot;,
+  &quot;session_id&quot;: &quot;test-pii-check&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T10:12:08</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-startup</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T10:12:08.123296Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-startup&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T10:11:57</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-startup</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T10:11:57.238481Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-startup&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T10:11:32</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-startup</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T10:11:32.303997Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-startup&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T10:11:06</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-startup</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T10:11:06.776978Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-startup&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T10:10:49</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-startup</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T10:10:49.836363Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-startup&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T10:10:38</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.217623Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T10:10:38.217623Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.217623Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T10:07:21</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.546963Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T10:07:21.546963Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.546963Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:54:08</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-984f7f4c</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:54:08.522871Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-984f7f4c&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dc9b2ec8da9d&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s03&quot;,
+  &quot;tokens_in&quot;: 49,
+  &quot;tokens_out&quot;: 148,
+  &quot;cost_usd&quot;: 0.002367,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:54:08</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-984f7f4c</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:54:08.370502Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-984f7f4c&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Summarize the observability workflow for an AI API.&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dc9b2ec8da9d&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s03&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:54:08</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-0b39ccbe</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:54:08.367495Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-0b39ccbe&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;aae0b94055a9&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s02&quot;,
+  &quot;tokens_in&quot;: 48,
+  &quot;tokens_out&quot;: 98,
+  &quot;cost_usd&quot;: 0.001614,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:54:08</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-0b39ccbe</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:54:08.214811Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-0b39ccbe&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;How should an engineer investigate tail latency?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;aae0b94055a9&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s02&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:54:08</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-3bc0d924</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:54:08.212782Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-3bc0d924&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dde2e75b20cf&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s01&quot;,
+  &quot;tokens_in&quot;: 49,
+  &quot;tokens_out&quot;: 83,
+  &quot;cost_usd&quot;: 0.001392,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:54:08</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-3bc0d924</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:54:08.060480Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-3bc0d924&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Explain why metrics traces and logs work together.&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dde2e75b20cf&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s01&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:54:08</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-0fb322ce</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:54:08.057446Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-0fb322ce&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;ed72e61117f6&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s05&quot;,
+  &quot;tokens_in&quot;: 49,
+  &quot;tokens_out&quot;: 159,
+  &quot;cost_usd&quot;: 0.002532,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:54:07</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-0fb322ce</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:54:07.904820Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-0fb322ce&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Describe how to prove a slow span is the root cause.&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;ed72e61117f6&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s05&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:54:07</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-7bad8f5f</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">1191.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:54:07.902781Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-7bad8f5f&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 1191.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4570299f37e2&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s04&quot;,
+  &quot;tokens_in&quot;: 50,
+  &quot;tokens_out&quot;: 126,
+  &quot;cost_usd&quot;: 0.00204,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:54:06</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-7bad8f5f</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:54:06.320166Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-7bad8f5f&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Which signal should be checked after latency increases?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4570299f37e2&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s04&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:42:18</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.853171Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:42:18.853171Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.853171Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:41:56</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.129285Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:41:56.129285Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.129285Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:38:54</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-cb2f5ba3</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-alert">2652.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:38:54.190858Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-cb2f5ba3&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 2652.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;ed72e61117f6&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s05&quot;,
+  &quot;tokens_in&quot;: 49,
+  &quot;tokens_out&quot;: 158,
+  &quot;cost_usd&quot;: 0.002517,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:38:51</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-cb2f5ba3</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:38:51.537366Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-cb2f5ba3&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Describe how to prove a slow span is the root cause.&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;ed72e61117f6&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s05&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:38:51</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-a87fe8fa</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-alert">2651.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:38:51.536356Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-a87fe8fa&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 2651.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;aae0b94055a9&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s02&quot;,
+  &quot;tokens_in&quot;: 48,
+  &quot;tokens_out&quot;: 151,
+  &quot;cost_usd&quot;: 0.002409,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:38:48</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-a87fe8fa</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:38:48.883635Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-a87fe8fa&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;How should an engineer investigate tail latency?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;aae0b94055a9&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s02&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:38:48</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-57a1e799</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-alert">2652.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:38:48.881602Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-57a1e799&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 2652.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dde2e75b20cf&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s01&quot;,
+  &quot;tokens_in&quot;: 49,
+  &quot;tokens_out&quot;: 81,
+  &quot;cost_usd&quot;: 0.001362,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:38:46</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-57a1e799</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:38:46.227916Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-57a1e799&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Explain why metrics traces and logs work together.&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dde2e75b20cf&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s01&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:38:46</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-24bf450a</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-alert">2652.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:38:46.224897Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-24bf450a&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 2652.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dc9b2ec8da9d&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s03&quot;,
+  &quot;tokens_in&quot;: 49,
+  &quot;tokens_out&quot;: 161,
+  &quot;cost_usd&quot;: 0.002562,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:38:43</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-24bf450a</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:38:43.570517Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-24bf450a&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Summarize the observability workflow for an AI API.&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dc9b2ec8da9d&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s03&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:38:43</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-541ce36a</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-alert">2652.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:38:43.568493Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-541ce36a&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 2652.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4570299f37e2&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s04&quot;,
+  &quot;tokens_in&quot;: 50,
+  &quot;tokens_out&quot;: 124,
+  &quot;cost_usd&quot;: 0.00201,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:38:40</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-541ce36a</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:38:40.914888Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-541ce36a&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Which signal should be checked after latency increases?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4570299f37e2&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s04&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:23:10</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-c3c54a0f</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-alert">2652.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:23:10.931708Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-c3c54a0f&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 2652.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dde2e75b20cf&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s01&quot;,
+  &quot;tokens_in&quot;: 49,
+  &quot;tokens_out&quot;: 150,
+  &quot;cost_usd&quot;: 0.002397,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:23:08</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-c3c54a0f</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:23:08.278316Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-c3c54a0f&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Explain why metrics traces and logs work together.&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dde2e75b20cf&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s01&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:23:08</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-fed9acb4</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-alert">2651.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:23:08.276299Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-fed9acb4&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 2651.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;ed72e61117f6&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s05&quot;,
+  &quot;tokens_in&quot;: 49,
+  &quot;tokens_out&quot;: 128,
+  &quot;cost_usd&quot;: 0.002067,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:23:05</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-fed9acb4</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:23:05.623370Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-fed9acb4&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Describe how to prove a slow span is the root cause.&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;ed72e61117f6&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s05&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:23:05</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-a956513a</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-alert">2652.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:23:05.622358Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-a956513a&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 2652.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dc9b2ec8da9d&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s03&quot;,
+  &quot;tokens_in&quot;: 49,
+  &quot;tokens_out&quot;: 109,
+  &quot;cost_usd&quot;: 0.001782,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:23:02</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-a956513a</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:23:02.969263Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-a956513a&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Summarize the observability workflow for an AI API.&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;dc9b2ec8da9d&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s03&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:23:02</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-7b05e5ac</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-alert">2652.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:23:02.967251Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-7b05e5ac&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 2652.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4570299f37e2&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s04&quot;,
+  &quot;tokens_in&quot;: 50,
+  &quot;tokens_out&quot;: 131,
+  &quot;cost_usd&quot;: 0.002115,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:23:00</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-7b05e5ac</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:23:00.313014Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-7b05e5ac&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Which signal should be checked after latency increases?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4570299f37e2&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s04&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:23:00</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-dffe2979</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-alert">3888.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:23:00.311992Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-dffe2979&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 3888.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;aae0b94055a9&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s02&quot;,
+  &quot;tokens_in&quot;: 48,
+  &quot;tokens_out&quot;: 147,
+  &quot;cost_usd&quot;: 0.002349,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:22:56</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-dffe2979</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">monitoring</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:22:56.039151Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-dffe2979&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;monitoring&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;How should an engineer investigate tail latency?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;aae0b94055a9&quot;,
+  &quot;session_id&quot;: &quot;k4-l3a-challenge-s02&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:22:42</td>
+                <td><span class="badge-mini evt-default">incident_enabled</span></td>
+                <td><code class="cid-badge">req-a060cf89</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">control</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-warn">WARNING</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:22:42.409800Z&quot;,
+  &quot;event&quot;: &quot;incident_enabled&quot;,
+  &quot;correlation_id&quot;: &quot;req-a060cf89&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;control&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;WARNING&quot;,
+  &quot;service&quot;: &quot;control&quot;,
+  &quot;payload&quot;: {
+    &quot;name&quot;: &quot;rag_slow&quot;
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:10:32</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.813295Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:10:32.813295Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.813295Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:10:15</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.392925Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:10:15.392925Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.392925Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:10:07</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.712012Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:10:07.712012Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.712012Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:09:49</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.400912Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:09:49.400912Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.400912Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:09:32</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.022099Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:09:32.022099Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.022099Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:41</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-29205c1e</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:41.588837Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-29205c1e&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;105a9cef3903&quot;,
+  &quot;session_id&quot;: &quot;s10&quot;,
+  &quot;tokens_in&quot;: 42,
+  &quot;tokens_out&quot;: 130,
+  &quot;cost_usd&quot;: 0.002076,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:41</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-29205c1e</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:41.436315Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-29205c1e&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;How should alerts be designed?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;105a9cef3903&quot;,
+  &quot;session_id&quot;: &quot;s10&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:41</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-9f16567a</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">152.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:41.433328Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-9f16567a&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 152.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4d14d5d4f719&quot;,
+  &quot;session_id&quot;: &quot;s09&quot;,
+  &quot;tokens_in&quot;: 50,
+  &quot;tokens_out&quot;: 125,
+  &quot;cost_usd&quot;: 0.002025,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:41</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-9f16567a</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:41.279159Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-9f16567a&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;What is the policy for PII and credit card [REDACTED_CREDIT_CARD]?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4d14d5d4f719&quot;,
+  &quot;session_id&quot;: &quot;s09&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:41</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-a937f016</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:41.275138Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-a937f016&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2f015d970c0b&quot;,
+  &quot;session_id&quot;: &quot;s08&quot;,
+  &quot;tokens_in&quot;: 41,
+  &quot;tokens_out&quot;: 109,
+  &quot;cost_usd&quot;: 0.001758,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:41</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-a937f016</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:41.123516Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-a937f016&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;How do I debug tail latency?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2f015d970c0b&quot;,
+  &quot;session_id&quot;: &quot;s08&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:41</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-c53d325f</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">152.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:41.120495Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-c53d325f&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 152.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;1632c29ecdec&quot;,
+  &quot;session_id&quot;: &quot;s07&quot;,
+  &quot;tokens_in&quot;: 43,
+  &quot;tokens_out&quot;: 119,
+  &quot;cost_usd&quot;: 0.001914,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-c53d325f</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.967073Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-c53d325f&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;What should not appear in app logs?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;1632c29ecdec&quot;,
+  &quot;session_id&quot;: &quot;s07&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-d56a69b6</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">summary</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.963027Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-d56a69b6&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;summary&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4c4f62330d76&quot;,
+  &quot;session_id&quot;: &quot;s06&quot;,
+  &quot;tokens_in&quot;: 49,
+  &quot;tokens_out&quot;: 170,
+  &quot;cost_usd&quot;: 0.002697,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-d56a69b6</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">summary</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.810374Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-d56a69b6&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;summary&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Give me a short summary of the observability workflow&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4c4f62330d76&quot;,
+  &quot;session_id&quot;: &quot;s06&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-6bce6f6d</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">152.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.807344Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-6bce6f6d&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 152.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;64f6ec689229&quot;,
+  &quot;session_id&quot;: &quot;s05&quot;,
+  &quot;tokens_in&quot;: 47,
+  &quot;tokens_out&quot;: 156,
+  &quot;cost_usd&quot;: 0.002481,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-6bce6f6d</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.654444Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-6bce6f6d&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Here is my phone [REDACTED_PHONE_VN], what should be logged?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;64f6ec689229&quot;,
+  &quot;session_id&quot;: &quot;s05&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-a8bea53d</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.650404Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-a8bea53d&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;75af07890985&quot;,
+  &quot;session_id&quot;: &quot;s04&quot;,
+  &quot;tokens_in&quot;: 53,
+  &quot;tokens_out&quot;: 92,
+  &quot;cost_usd&quot;: 0.001539,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-a8bea53d</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.498195Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-a8bea53d&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Can I get help with policy and monitoring?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;75af07890985&quot;,
+  &quot;session_id&quot;: &quot;s04&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-afc02604</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">summary</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.494185Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-afc02604&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;summary&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;97ce842ec69d&quot;,
+  &quot;session_id&quot;: &quot;s03&quot;,
+  &quot;tokens_in&quot;: 57,
+  &quot;tokens_out&quot;: 168,
+  &quot;cost_usd&quot;: 0.002691,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-afc02604</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">summary</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.341300Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-afc02604&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;summary&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Summarize the monitoring policy for production logging&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;97ce842ec69d&quot;,
+  &quot;session_id&quot;: &quot;s03&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-49218d3d</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.336121Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-49218d3d&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;95b6504a8bd6&quot;,
+  &quot;session_id&quot;: &quot;s02&quot;,
+  &quot;tokens_in&quot;: 46,
+  &quot;tokens_out&quot;: 115,
+  &quot;cost_usd&quot;: 0.001863,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-49218d3d</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.183987Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-49218d3d&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Explain why metrics traces and logs work together&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;95b6504a8bd6&quot;,
+  &quot;session_id&quot;: &quot;s02&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-674faab6</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">152.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.179206Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-674faab6&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 152.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2055254ee30a&quot;,
+  &quot;session_id&quot;: &quot;s01&quot;,
+  &quot;tokens_in&quot;: 50,
+  &quot;tokens_out&quot;: 169,
+  &quot;cost_usd&quot;: 0.002685,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:40</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-674faab6</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:40.026378Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-674faab6&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;What is your refund policy? My email is [REDACTED_EMAIL]&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2055254ee30a&quot;,
+  &quot;session_id&quot;: &quot;s01&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:31</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-1b62fdcc</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-alert">2843.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:31.168670Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-1b62fdcc&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 2843.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2a2006df8771&quot;,
+  &quot;session_id&quot;: &quot;session-01&quot;,
+  &quot;tokens_in&quot;: 40,
+  &quot;tokens_out&quot;: 113,
+  &quot;cost_usd&quot;: 0.001815,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:05:27</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-1b62fdcc</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:05:27.862176Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-1b62fdcc&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Explain waterfall traces&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2a2006df8771&quot;,
+  &quot;session_id&quot;: &quot;session-01&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:04:28</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.763186Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:04:28.763186Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.763186Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T09:04:17</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.349830Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T09:04:17.349830Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.349830Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:52:27</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.322022Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:52:27.322022Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.322022Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:52:20</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.380562Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:52:20.380562Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.380562Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:52:14</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.699113Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:52:14.699113Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.699113Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:44:38</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-1e4137c9</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">151.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:44:38.739500Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-1e4137c9&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 151.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2a2006df8771&quot;,
+  &quot;session_id&quot;: &quot;session-01&quot;,
+  &quot;tokens_in&quot;: 40,
+  &quot;tokens_out&quot;: 175,
+  &quot;cost_usd&quot;: 0.002745,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:44:38</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-1e4137c9</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:44:38.586931Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-1e4137c9&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Explain prompt versioning&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2a2006df8771&quot;,
+  &quot;session_id&quot;: &quot;session-01&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:32:21</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-aa710789</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">1071.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:32:21.464768Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-aa710789&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 1071.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2a2006df8771&quot;,
+  &quot;session_id&quot;: &quot;session-01&quot;,
+  &quot;tokens_in&quot;: 47,
+  &quot;tokens_out&quot;: 161,
+  &quot;cost_usd&quot;: 0.002556,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:32:20</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-aa710789</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:32:20.006627Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-aa710789&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Explain monitoring&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2a2006df8771&quot;,
+  &quot;session_id&quot;: &quot;session-01&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:31:34</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.091670Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:31:34.091670Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.091670Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:31:20</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.956076Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:31:20.956076Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.956076Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:31:12</td>
+                <td><span class="badge-mini evt-default">app_started</span></td>
+                <td><code class="cid-badge">sys-.169234Z</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">system</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:31:12.169234Z&quot;,
+  &quot;event&quot;: &quot;app_started&quot;,
+  &quot;correlation_id&quot;: &quot;sys-.169234Z&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;system&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;day13-l3a-monitoring-llmops-lab&quot;,
+  &quot;payload&quot;: {
+    &quot;tracing_enabled&quot;: true
+  }
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:18:14</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-17cf43c7</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">397.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:18:14.574218Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-17cf43c7&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 397.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;bb82030dbc2b&quot;,
+  &quot;session_id&quot;: &quot;s1&quot;,
+  &quot;tokens_in&quot;: 42,
+  &quot;tokens_out&quot;: 116,
+  &quot;cost_usd&quot;: 0.001866,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:18:14</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-17cf43c7</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:18:14.175057Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-17cf43c7&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Lien he: [REDACTED_PHONE_VN] email: [REDACTED_EMAIL] cccd: [REDACTED_CCCD] the: ...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;bb82030dbc2b&quot;,
+  &quot;session_id&quot;: &quot;s1&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:18:09</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">custom-id-1234</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">1678.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:18:09.617271Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;custom-id-1234&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 1678.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;bb82030dbc2b&quot;,
+  &quot;session_id&quot;: &quot;s1&quot;,
+  &quot;tokens_in&quot;: 21,
+  &quot;tokens_out&quot;: 89,
+  &quot;cost_usd&quot;: 0.001398,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:18:07</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">custom-id-1234</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:18:07.937284Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;custom-id-1234&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;test&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;bb82030dbc2b&quot;,
+  &quot;session_id&quot;: &quot;s1&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:18:00</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-8ac66a4e</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-alert">2051.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:18:00.030729Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-8ac66a4e&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 2051.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;bb82030dbc2b&quot;,
+  &quot;session_id&quot;: &quot;s1&quot;,
+  &quot;tokens_in&quot;: 21,
+  &quot;tokens_out&quot;: 84,
+  &quot;cost_usd&quot;: 0.001323,
+  &quot;quality_score&quot;: 0.8,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:57</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-8ac66a4e</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:57.977174Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-8ac66a4e&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;test&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;bb82030dbc2b&quot;,
+  &quot;session_id&quot;: &quot;s1&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:50</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-82d40127</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">386.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:50.168326Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-82d40127&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 386.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;105a9cef3903&quot;,
+  &quot;session_id&quot;: &quot;s10&quot;,
+  &quot;tokens_in&quot;: 28,
+  &quot;tokens_out&quot;: 82,
+  &quot;cost_usd&quot;: 0.001314,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:49</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-82d40127</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:49.780746Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-82d40127&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;How should alerts be designed?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;105a9cef3903&quot;,
+  &quot;session_id&quot;: &quot;s10&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:49</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-9bde751a</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">385.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:49.778716Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-9bde751a&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 385.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4d14d5d4f719&quot;,
+  &quot;session_id&quot;: &quot;s09&quot;,
+  &quot;tokens_in&quot;: 36,
+  &quot;tokens_out&quot;: 119,
+  &quot;cost_usd&quot;: 0.001893,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:49</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-9bde751a</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:49.392328Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-9bde751a&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;What is the policy for PII and credit card [REDACTED_CREDIT_CARD]?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4d14d5d4f719&quot;,
+  &quot;session_id&quot;: &quot;s09&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:49</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-2fed5e3b</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">384.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:49.389309Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-2fed5e3b&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 384.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2f015d970c0b&quot;,
+  &quot;session_id&quot;: &quot;s08&quot;,
+  &quot;tokens_in&quot;: 27,
+  &quot;tokens_out&quot;: 117,
+  &quot;cost_usd&quot;: 0.001836,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:49</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-2fed5e3b</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:49.003428Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-2fed5e3b&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;How do I debug tail latency?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;2f015d970c0b&quot;,
+  &quot;session_id&quot;: &quot;s08&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:49</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-2b216647</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">386.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:49.001421Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-2b216647&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 386.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;1632c29ecdec&quot;,
+  &quot;session_id&quot;: &quot;s07&quot;,
+  &quot;tokens_in&quot;: 29,
+  &quot;tokens_out&quot;: 167,
+  &quot;cost_usd&quot;: 0.002592,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:48</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-2b216647</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:48.613655Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-2b216647&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;What should not appear in app logs?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;1632c29ecdec&quot;,
+  &quot;session_id&quot;: &quot;s07&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:48</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-21337be1</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">summary</span></td>
+                <td class="lat-normal">392.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:48.610984Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-21337be1&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;summary&quot;,
+  &quot;latency&quot;: 392.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4c4f62330d76&quot;,
+  &quot;session_id&quot;: &quot;s06&quot;,
+  &quot;tokens_in&quot;: 35,
+  &quot;tokens_out&quot;: 92,
+  &quot;cost_usd&quot;: 0.001485,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 51
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:48</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-21337be1</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">summary</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:48.217032Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-21337be1&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;summary&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Give me a short summary of the observability workflow&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;4c4f62330d76&quot;,
+  &quot;session_id&quot;: &quot;s06&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:48</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-7db05440</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">385.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:48.214504Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-7db05440&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 385.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;64f6ec689229&quot;,
+  &quot;session_id&quot;: &quot;s05&quot;,
+  &quot;tokens_in&quot;: 33,
+  &quot;tokens_out&quot;: 159,
+  &quot;cost_usd&quot;: 0.002484,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:47</td>
+                <td><span class="badge-mini evt-recv">request_received</span></td>
+                <td><code class="cid-badge">req-7db05440</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">0.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:47.827956Z&quot;,
+  &quot;event&quot;: &quot;request_received&quot;,
+  &quot;correlation_id&quot;: &quot;req-7db05440&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 0.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;message_preview&quot;: &quot;Here is my phone [REDACTED_PHONE_VN], what should be logged?&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;64f6ec689229&quot;,
+  &quot;session_id&quot;: &quot;s05&quot;
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+
+            <tr class="log-row">
+                <td style="font-family:monospace; font-size:11px; color:var(--text-sub); white-space:nowrap;">2026-09-29T08:17:47</td>
+                <td><span class="badge-mini evt-sent">response_sent</span></td>
+                <td><code class="cid-badge">req-cc0b2ed1</code></td>
+                <td><code class="model-badge">claude-sonnet-4-5</code></td>
+                <td><span class="env-badge">dev</span></td>
+                <td><span class="feat-badge">qa</span></td>
+                <td class="lat-normal">388.0 ms</td>
+                <td><span class="badge-mini lvl-info">INFO</span></td>
+                <td>
+                    <details class="json-details">
+                        <summary class="json-btn">View JSON</summary>
+                        <pre class="json-pre">{
+  &quot;timestamp&quot;: &quot;2026-09-29T08:17:47.824404Z&quot;,
+  &quot;event&quot;: &quot;response_sent&quot;,
+  &quot;correlation_id&quot;: &quot;req-cc0b2ed1&quot;,
+  &quot;model&quot;: &quot;claude-sonnet-4-5&quot;,
+  &quot;env&quot;: &quot;dev&quot;,
+  &quot;feature&quot;: &quot;qa&quot;,
+  &quot;latency&quot;: 388.0,
+  &quot;level&quot;: &quot;INFO&quot;,
+  &quot;service&quot;: &quot;api&quot;,
+  &quot;payload&quot;: {
+    &quot;answer_preview&quot;: &quot;Starter answer. You should improve this output logic and add better quality chec...&quot;
+  },
+  &quot;user_id_hash&quot;: &quot;75af07890985&quot;,
+  &quot;session_id&quot;: &quot;s04&quot;,
+  &quot;tokens_in&quot;: 39,
+  &quot;tokens_out&quot;: 176,
+  &quot;cost_usd&quot;: 0.002757,
+  &quot;quality_score&quot;: 0.9,
+  &quot;tool_name&quot;: &quot;retrieval&quot;,
+  &quot;tool_success&quot;: true,
+  &quot;ttft_ms&quot;: 50
+}</pre>
+                    </details>
+                </td>
+            </tr>
+        
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const seriesData = [{"minute": "09:23", "requests": 4, "latency_p95": 3640.8, "errors": 0, "cost": 0.010709999999999999}, {"minute": "09:24", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:25", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:26", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:27", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:28", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:29", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:30", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:31", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:32", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:33", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:34", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:35", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:36", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:37", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:38", "requests": 5, "latency_p95": 2652.0, "errors": 0, "cost": 0.01086}, {"minute": "09:39", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:40", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:41", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:42", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:43", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:44", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:45", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:46", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:47", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:48", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:49", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:50", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:51", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:52", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:53", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:54", "requests": 5, "latency_p95": 983.0, "errors": 0, "cost": 0.009944999999999999}, {"minute": "09:55", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:56", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:57", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:58", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "09:59", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:00", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:01", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:02", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:03", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:04", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:05", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:06", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:07", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:08", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:09", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:10", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:11", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:12", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:13", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:14", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:15", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:16", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:17", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:18", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:19", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:20", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:21", "requests": 0, "latency_p95": 0.0, "errors": 0, "cost": 0.0}, {"minute": "10:22", "requests": 1, "latency_p95": 3394.0, "errors": 0, "cost": 0.001644}];
+        const labels = seriesData.map(d => d.minute);
+
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#64748b', maxTicksLimit: 6 } },
+                y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
+            }
+        };
+
+        // Latency Chart
+        new Chart(document.getElementById('chart-latency'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'P95 (ms)', data: seriesData.map(d => d.latency_p95), borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.1)', fill: true, tension: 0.3 },
+                    { label: 'Threshold', data: Array(labels.length).fill(3000), borderColor: '#eab308', borderDash: [4, 4], pointRadius: 0 }
+                ]
+            },
+            options: chartOptions
+        });
+
+        // Traffic Chart
+        new Chart(document.getElementById('chart-traffic'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'Requests', data: seriesData.map(d => d.requests), backgroundColor: '#22c55e', borderRadius: 2 }]
+            },
+            options: chartOptions
+        });
+
+        // Errors Chart
+        new Chart(document.getElementById('chart-errors'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'Errors', data: seriesData.map(d => d.errors), backgroundColor: '#ef4444', borderRadius: 2 }]
+            },
+            options: chartOptions
+        });
+
+        // Cost Chart
+        new Chart(document.getElementById('chart-cost'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{ label: 'Cost ($)', data: seriesData.map(d => d.cost), borderColor: '#a855f7', backgroundColor: 'rgba(168, 85, 247, 0.1)', fill: true, tension: 0.3 }]
+            },
+            options: chartOptions
+        });
+
+        // Tokens Doughnut
+        new Chart(document.getElementById('chart-tokens'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Tokens In', 'Tokens Out'],
+                datasets: [{ data: [793, 2052], backgroundColor: ['#38bdf8', '#a855f7'], borderWidth: 0 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom', labels: { color: '#94a3b8' } } } }
+        });
+
+        // Quality Gauge / Bar
+        new Chart(document.getElementById('chart-quality'), {
+            type: 'bar',
+            data: {
+                labels: ['Mean Score'],
+                datasets: [
+                    { label: 'Quality', data: [0.84], backgroundColor: '#22c55e', borderRadius: 4 },
+                    { label: 'Threshold', data: [0.75], backgroundColor: 'rgba(234, 179, 8, 0.4)', borderRadius: 4 }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { min: 0, max: 1, grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+                    y: { display: false }
+                },
+                plugins: { legend: { display: true, position: 'bottom', labels: { color: '#94a3b8' } } }
+            }
+        });
+
+        // Live Log Filtering
+        function filterLogs() {
+            const filter = document.getElementById('log-search').value.toLowerCase();
+            const rows = document.querySelectorAll('.log-row');
+            let visibleCount = 0;
+            rows.forEach(row => {
+                const text = row.innerText.toLowerCase();
+                if (text.includes(filter)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            document.getElementById('log-count').innerText = `Showing: ${visibleCount}/${rows.length} records`;
+        }
+
+        // Auto reload page every 30 seconds
+        setTimeout(() => { window.location.reload(); }, 30000);
+    </script>
+</body>
+</html>
